@@ -1,0 +1,81 @@
+version: '3.5'
+x-logging:
+  &default-logging
+  options:
+    max-size: '100k'
+    max-file: '3'
+  driver: json-file
+
+services:
+
+  widget:
+    image: nginx:1.17.10
+    container_name: sova-widget
+    ports:
+      - 80:80
+    depends_on:
+      - service
+    volumes:
+      - ./widget:/var/www
+      - ./etc/nginx/conf.d:/etc/nginx/conf.d
+    env_file:
+      - .env
+    restart: always
+    logging: *default-logging
+
+  engine:
+    build: engine/
+    container_name: sova-engine
+    environment:
+      - APS_MAX_FILTERS=1
+      - APS_START_FILTERS=0
+      - APS_MIN_FILTERS=0
+      - APS_LOG_LEVEL=4
+      - IFS_LOG_LEVEL=DEBUG
+      - IFS_LOG_DATA_FLOW=TRUE
+      - IFS_CACHE_SERVERS=memcached.local:11211
+      - IFS_CACHE_TTL=604800
+    volumes:
+      - ./var/dldata:/dldata
+    expose:
+      - 2255
+    depends_on:
+      - memcached.local
+    restart: always
+    logging: *default-logging
+
+  service:
+    container_name: sova-service
+    build: service/
+    command: ['gunicorn', 'main:main_start', '--reload', '--bind', '0.0.0.0:8080', '--worker-class', 'aiohttp.worker.GunicornWebWorker']
+    expose:
+      - 8080
+    depends_on:
+      - engine
+      - db
+    env_file:
+      - .env
+    volumes:
+      - ./var/db:/code/var/db
+    restart: always
+    logging: *default-logging
+
+  memcached.local:
+    image: memcached
+    container_name: sova-memcached
+    restart: always
+    logging: *default-logging
+
+  db:
+    image: postgres:11.8
+    container_name: sova-postgres
+    env_file:
+      - .env
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+    logging: *default-logging
+    ports:
+    - 5432:5432
+
+volumes:
+  pg_data:

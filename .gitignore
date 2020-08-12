@@ -1,0 +1,6 @@
+/.env
+/widget
+/service
+/var
+/venv/
+/engine/
